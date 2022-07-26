@@ -21,24 +21,34 @@ module top (
 );
 
 
+
+parameter DATA_SCAN=16'h0000;      //扫描数据包头
+
+parameter CMD_HEAD=16'hAABB;        //命令数据包头标志
+parameter CMD_ADC=16'hCADC;         //命令类型：操作ADC
+parameter CMD_ADC_SELECT=16'hCA01;  //操作ADC：选择ADC
+parameter CMD_ADC_FREQ=16'hCA02;    //操作ADC：设置ADC时钟频率
+parameter CMD_ADC_POINTS=16'hCA03;  //操作ADC：设置ADC连续采样点数
+parameter CMD_DAC=16'hCDAC;         //命令类型：操作DAC
+parameter CMD_DAC_SELECT=16'hCD01;  //操作DAC：选择DAC
+parameter CMD_DAC_FREQ=16'hCD02;    //操作DAC：设置DAC频率
+parameter CMD_DAC_PHASE=16'hCD03;   //操作DAC：设置DAC相位
+parameter CMD_TAIL=16'hBBAA;        //数据包尾标志
+
 parameter ADC_9226_0=16'hADC0;      //选择ADC:ADC0-AD9226_0
 parameter ADC_9226_1=16'hADC1;      //选择ADC:ADC1-AD9226_1
 
-parameter DATA_START=16'h0000;      //状态机初始状态
+parameter READ_HEAD=16'hCCDD;        //读取数据包头标志
+parameter WRITE_WAIT=16'hABAD;
+parameter TXD_START=16'hABCD;        //读取数据包头标志
+parameter TXD_WAIT=16'hB2B3;        //读取数据包头标志
+parameter TXD_END=16'hDCBA;
+// parameter CONV_WAIT=16'hF2F3;
+// parameter CONV_END=16'hE2E3;
+// parameter TXD_START=16'hDCBA;
+// parameter TXD_WAIT=16'hC2C3;
 
-parameter CMD_HEAD=16'hABCD;        //命令数据包头标志
-parameter READ_HEAD=16'hABBB;        //读取数据包头标志
-parameter CMD_ADC=16'hFADC;         //数据类型：操作ADC
-
-parameter CMD_ADC_SELECT=16'hAF00;  //操作ADC：选择ADC
-parameter CMD_ADC_FREQ=16'hAF01;    //操作ADC：设置ADC时钟频率
-parameter CMD_ADC_POINTS=16'hAF02;  //操作ADC：设置ADC连续采样点数
-parameter CMD_TAIL=16'hCDEF;        //数据包尾标志
-parameter CONV_WAIT=16'hF2F3;
-parameter CONV_END=16'hE2E3;
-parameter TXD_START=16'hDCBA;
-parameter TXD_WAIT=16'hC2C3;
-parameter TXD_END=16'hB2B3;
+parameter READ_TAIL=16'hDDCC;        //数据包尾标志
 
 //pll clk interface
 wire clk_256M;
@@ -174,37 +184,39 @@ reg [15:0] txd_sample_num;
 reg [15:0] cmd_data_length;
 reg [15:0] cmd_state;
 
-
+// stm32在i=0的数据包会在i=1返回
 //命令控制状态机
 always @(posedge rxd_flag_p or negedge rst_n) begin
     if(!rst_n) begin
-        cmd_state <= DATA_START;
+        cmd_state <= DATA_SCAN;
         cmd_data_length <= 4'd0;
         adc_select <= 16'h0000;
-        // adc_sample_freq<=32'd200_000;
         adc_sample_num=16'd512;
         txd_sample_num=16'd512;
-        // adc_txd_en <= 1'b0;
-        // adc_txd_head <= 1'b0;
         fifo_aclr <=1'b0;
         txd_data<= 16'h0;
         adc_fifo_wr_control<=1'd1;
         adc_fifo_rd_control<=1'd0;
+
     end else begin
         case(cmd_state)
-            DATA_START://接收命令数据包头标志
+            DATA_SCAN://扫描数据包头
                 begin
-                    fifo_aclr <=1'b0;
-                    txd_data<= 16'h0;
+                    fifo_aclr <=1'b0;//清空FIFO
+                    txd_data<= 16'h0;//SPI 默认传空
                     if(rxd_data == CMD_HEAD)
-                        cmd_state <= CMD_HEAD;
+                        cmd_state <= CMD_HEAD;//命令包头
+                    else if(rxd_data == READ_HEAD)
+                        cmd_state <= READ_HEAD;//读取包头
                     else
                         cmd_state <= cmd_state;
                  end
-            CMD_HEAD://接收数据类型
+            CMD_HEAD://判断命令类型
                 begin
                     if(rxd_data == CMD_ADC)
                         cmd_state <= CMD_ADC;  
+                    else if(rxd_data == CMD_DAC)
+                        cmd_state <= CMD_DAC;  
                     else
                         cmd_state <= cmd_state;  
                 end
@@ -266,54 +278,57 @@ always @(posedge rxd_flag_p or negedge rst_n) begin
                 end
             CMD_TAIL://数据包尾标志
                 begin
-                    cmd_state <= DATA_START;
-                    txd_data<= 16'h0;
+                    cmd_state <= DATA_SCAN;
                 end
-            READ_HEAD:
+            READ_HEAD://读取请求
                 begin
+                    //FIFO异步清零
+                    fifo_aclr <= 1'b1;
+                    //使能写,失能读
+                    adc_fifo_wr_control<=1'd1;
+                    adc_fifo_rd_control<=1'd0;
+                    txd_data <= 16'h0;
+                    cmd_state <= WRITE_WAIT;
+                end
+            WRITE_WAIT://等待FIFO写入
+                begin
+                    //FIFO使能
+                    fifo_aclr <= 1'b0;
                     if(fifo_rd_en)begin
-                        cmd_state <= TXD_START;
-                        txd_data <= 16'h0;//波形数据标志头
+                        //使能读,失能写
+                        adc_fifo_rd_control<=1'd1;
+                        adc_fifo_wr_control<=1'd0;
+                        txd_data <= TXD_START; //波形数据标志头
+                        txd_sample_num <= adc_sample_num; //发送点数等于采样点数
+                        cmd_state <= TXD_WAIT;
                     end
                     else begin
                         cmd_state <= cmd_state;    
                     end
                 end
-            TXD_START://开始读取FIFO
-                begin
-                    if(fifo_rd_en)begin
-                        txd_data <= 16'hABCD;//波形数据标志头
-                        adc_fifo_rd_control<=1'd1;
-                        adc_fifo_wr_control<=1'd0;
-                        cmd_state<=TXD_WAIT;
-                        txd_sample_num <= adc_sample_num;
-                    end
-                    else begin
-                        cmd_state <= cmd_state;
-                        txd_data<= 16'h0;
-                    end
-                end
             TXD_WAIT://等待发送完成
                 begin
                     if(txd_sample_num!=16'd0) begin
+                        //传输
                         txd_sample_num <= txd_sample_num-1'b1;
                         txd_data <= fifo_do;
                         cmd_state <= cmd_state;
                     end 
                     else begin
-                        fifo_aclr <=1'b1;
+                        //传输完成
+                        fifo_aclr <= 1'b1;
                         adc_fifo_rd_control <= 1'd0;
                         adc_fifo_wr_control <= 1'd1;
-                        cmd_state <= TXD_END; 
-                        txd_data<= 16'hDCBA;
                         adc_select<=16'h0;
+                        cmd_state <= READ_TAIL; 
+                        txd_data<= TXD_END;
                     end
                 end
-             TXD_END://等待发送完成
+             READ_TAIL://等待发送完成
                 begin
                     txd_data<= 16'h0;
                     if(rxd_data==16'hDCAB) begin
-                        cmd_state <= DATA_START; 
+                        cmd_state <= DATA_SCAN; 
                     end
                     else begin
                         cmd_state <= cmd_state;
@@ -330,14 +345,14 @@ end
 
 
 //测试用例:收啥发啥
-always @(posedge rxd_flag_p or negedge rst_n) begin
-    if(!rst_n) begin
-        txd_data<=16'd0;
-    end
-    else begin
-        txd_data<=rxd_data;
-    end
-end
+// always @(posedge rxd_flag_p or negedge rst_n) begin
+//     if(!rst_n) begin
+//         txd_data<=16'd0;
+//     end
+//     else begin
+//         txd_data<=rxd_data;
+//     end
+// end
 
 
 
