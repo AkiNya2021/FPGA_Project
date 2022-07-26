@@ -65,6 +65,37 @@ set_location_assignment PIN_70 -to CS_N
 set_location_assignment PIN_71 -to SCK
 set_location_assignment PIN_72 -to MISO
 set_location_assignment PIN_73 -to MOSI
+
+set_location_assignment PIN_67 -to ad9226_clk_0
+set_location_assignment PIN_60 -to ad9226_data_in_0[1]
+set_location_assignment PIN_58 -to ad9226_data_in_0[3]
+set_location_assignment PIN_54 -to ad9226_data_in_0[5]
+set_location_assignment PIN_52 -to ad9226_data_in_0[7]
+set_location_assignment PIN_50 -to ad9226_data_in_0[9]
+set_location_assignment PIN_46 -to ad9226_data_in_0[11]
+set_location_assignment PIN_64 -to ad9226_data_in_0[0]
+set_location_assignment PIN_59 -to ad9226_data_in_0[2]
+set_location_assignment PIN_55 -to ad9226_data_in_0[4]
+set_location_assignment PIN_53 -to ad9226_data_in_0[6]
+set_location_assignment PIN_51 -to ad9226_data_in_0[8]
+set_location_assignment PIN_49 -to ad9226_data_in_0[10]
+set_location_assignment PIN_44 -to ad9226_otr_0
+
+set_location_assignment PIN_39 -to ad9226_clk_1
+set_location_assignment PIN_32 -to ad9226_data_in_1[1]
+set_location_assignment PIN_30 -to ad9226_data_in_1[3]
+set_location_assignment PIN_25 -to ad9226_data_in_1[5]
+set_location_assignment PIN_11 -to ad9226_data_in_1[7]
+set_location_assignment PIN_7 -to ad9226_data_in_1[9]
+set_location_assignment PIN_2 -to ad9226_data_in_1[11]
+set_location_assignment PIN_33 -to ad9226_data_in_1[0]
+set_location_assignment PIN_31 -to ad9226_data_in_1[2]
+set_location_assignment PIN_28 -to ad9226_data_in_1[4]
+set_location_assignment PIN_24 -to ad9226_data_in_1[6]
+set_location_assignment PIN_10 -to ad9226_data_in_1[8]
+set_location_assignment PIN_3 -to ad9226_data_in_1[10]
+set_location_assignment PIN_1 -to ad9226_otr_1
+
 set_global_assignment -name ENABLE_SIGNALTAP ON
 set_global_assignment -name USE_SIGNALTAP_FILE output_files/spi.stp
 set_global_assignment -name SIGNALTAP_FILE output_files/spi.stp
